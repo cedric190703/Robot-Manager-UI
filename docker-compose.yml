@@ -1,0 +1,48 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: robot_manager_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=true
+    volumes:
+      # Mount backend code for development
+      - ./backend:/app
+      # Mount device access (for robot connections)
+      - /dev:/dev
+    privileged: true  # Required for device access and sudo commands
+    restart: unless-stopped
+    networks:
+      - robot_network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: robot_manager_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - robot_network
+    command: pnpm dev --host
+
+networks:
+  robot_network:
+    driver: bridge
+
+volumes:
+  backend_data:
