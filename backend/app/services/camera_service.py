@@ -9,8 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class CameraService:
-    """Service for capturing camera snapshots and streaming MJPEG."""
-
     def __init__(self):
         # Cache open VideoCapture objects keyed by device index
         self._captures: dict = {}

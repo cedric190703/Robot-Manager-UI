@@ -7,8 +7,6 @@ from app.models.schemas import CommandStatus
 
 
 class CommandService:
-    """Service for managing command execution"""
-    
     def __init__(self):
         self.processes: Dict[str, dict] = {}
     
