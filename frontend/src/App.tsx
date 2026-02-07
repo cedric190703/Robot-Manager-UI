@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bot, Settings, History, Info, Camera } from 'lucide-react';
+import { Bot, Usb, History, Info, Camera, Workflow, Target, Gamepad2 } from 'lucide-react';
 import { PortManager } from './components/PortManager';
 import { CalibrationPanel } from './components/CalibrationPanel';
 import { TeleoperationPanel } from './components/TeleoperationPanel';
 import { CameraPanel } from './components/CameraPanel';
+import { RecordingPanel } from './components/RecordingPanel';
 import { CommandHistory } from './components/CommandHistory';
+import { getIdentifiedPorts } from './api/robotApi';
 import './App.css';
 
-type TabType = 'ports' | 'cameras' | 'calibrate' | 'teleoperate' | 'history';
+type TabType = 'ports' | 'cameras' | 'calibrate' | 'teleoperate' | 'recording' | 'history';
 
 interface Tab {
   id: TabType;
@@ -16,11 +18,12 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: 'ports', label: 'Port Management', icon: <Settings size={20} /> },
-  { id: 'cameras', label: 'Cameras', icon: <Camera size={20} /> },
-  { id: 'calibrate', label: 'Calibration', icon: <Bot size={20} /> },
-  { id: 'teleoperate', label: 'Teleoperation', icon: <Bot size={20} /> },
-  { id: 'history', label: 'Command History', icon: <History size={20} /> },
+  { id: 'ports', label: 'Ports', icon: <Usb size={16} /> },
+  { id: 'cameras', label: 'Cameras', icon: <Camera size={16} /> },
+  { id: 'calibrate', label: 'Calibration', icon: <Target size={16} /> },
+  { id: 'teleoperate', label: 'Teleoperation', icon: <Gamepad2 size={16} /> },
+  { id: 'recording', label: 'Pipeline', icon: <Workflow size={16} /> },
+  { id: 'history', label: 'History', icon: <History size={16} /> },
 ];
 
 function App() {
@@ -31,6 +34,19 @@ function App() {
   // Callback when ports are identified in PortManager (e.g. { leader: "/dev/ttyACM0", follower: "/dev/ttyACM1" })
   const handlePortsDetected = useCallback((ports: Record<string, string>) => {
     setIdentifiedPorts(ports);
+  }, []);
+
+  // Load persisted ports from DB on mount
+  useEffect(() => {
+    getIdentifiedPorts()
+      .then((res) => {
+        if (res.ports && Object.keys(res.ports).length > 0) {
+          setIdentifiedPorts(res.ports);
+        }
+      })
+      .catch(() => {
+        // Backend not ready yet, will load on next health check
+      });
   }, []);
 
   // Check backend connection
@@ -58,6 +74,8 @@ function App() {
         return <CalibrationPanel identifiedPorts={identifiedPorts} />;
       case 'teleoperate':
         return <TeleoperationPanel identifiedPorts={identifiedPorts} />;
+      case 'recording':
+        return <RecordingPanel identifiedPorts={identifiedPorts} />;
       case 'history':
         return <CommandHistory />;
       default:
@@ -70,11 +88,8 @@ function App() {
       <header className="app-header">
         <div className="header-content">
           <div className="header-title">
-            <Bot size={48} />
-            <div>
-              <h1>Robot Manager</h1>
-              <p className="subtitle">LeRobot Control Center</p>
-            </div>
+            <Bot size={24} />
+            <h1>Robot Manager</h1>
           </div>
           <div className="connection-status">
             <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`} />

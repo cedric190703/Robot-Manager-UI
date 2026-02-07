@@ -14,13 +14,17 @@ from app.models.schemas import (
     IdentifyPortDetectResponse,
     IdentifiedPortsResponse,
     InteractiveSessionResponse,
-    InteractiveInputRequest
+    InteractiveInputRequest,
+    SavePortRequest,
+    CalibrationRecord,
+    CalibrationRecordCreate,
 )
 from app.services.command_service import command_service
 from app.services.robot_service import robot_service
 from app.services.port_service import port_service
 from app.services.interactive_service import interactive_service
 from app.services.camera_service import camera_service
+from app.db.database import database
 
 router = APIRouter()
 
@@ -67,8 +71,66 @@ async def identify_port_refresh(session_id: str):
 
 @router.get("/identify-port/results", response_model=IdentifiedPortsResponse)
 async def get_identified_ports():
-    """Get all identified arm → port mappings."""
+    """Get all identified arm → port mappings (persisted across restarts)."""
     return IdentifiedPortsResponse(ports=port_service.get_identified_ports())
+
+
+@router.post("/identify-port/save")
+async def save_port(request: SavePortRequest):
+    """Manually save a port mapping (persisted in DB)."""
+    port_service.set_port(request.arm_name, request.port_path)
+    return {"message": f"Saved {request.arm_name} → {request.port_path}"}
+
+
+@router.delete("/identify-port/{arm_name}")
+async def delete_identified_port(arm_name: str):
+    """Remove a saved port mapping."""
+    removed = port_service.remove_port(arm_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"No saved port for '{arm_name}'")
+    return {"message": f"Removed port mapping for {arm_name}"}
+
+
+@router.delete("/identify-port/all/clear")
+async def clear_all_ports():
+    """Clear all identified port mappings (DB + memory)."""
+    port_service.clear_all()
+    return {"message": "All port mappings cleared"}
+
+
+# ─── Calibration persistence ─────────────────────────────────────
+
+@router.get("/calibrations")
+async def list_calibrations():
+    """List all saved calibration records."""
+    return database.list_calibrations()
+
+
+@router.post("/calibrations")
+async def save_calibration(record: CalibrationRecordCreate):
+    """Save a calibration record (called after a successful calibration session)."""
+    cal_id = f"{record.arm_role}:{record.arm_name}"
+    data = record.model_dump()
+    data["id"] = cal_id
+    saved = database.save_calibration(data)
+    return saved
+
+
+@router.delete("/calibrations/{arm_role}/{arm_name}")
+async def delete_calibration(arm_role: str, arm_name: str):
+    """Delete a calibration record."""
+    cal_id = f"{arm_role}:{arm_name}"
+    removed = database.delete_calibration(cal_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"No calibration record for {cal_id}")
+    return {"message": f"Calibration record for {cal_id} deleted"}
+
+
+@router.delete("/calibrations/all/clear")
+async def clear_all_calibrations():
+    """Clear all calibration records."""
+    count = database.delete_all_calibrations()
+    return {"message": f"Cleared {count} calibration record(s)"}
 
 
 # ─── Legacy find-port (simple port listing) ──────────────────────────

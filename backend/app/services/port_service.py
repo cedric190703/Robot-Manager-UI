@@ -2,6 +2,8 @@ import uuid
 import subprocess
 from typing import Dict, List, Optional, Tuple
 
+from app.db.database import database
+
 
 class PortIdentificationService:
     """
@@ -18,13 +20,19 @@ class PortIdentificationService:
         Step 2: User unplugs arm via UI prompt
         Step 3: POST /identify-port/detect   → snapshots again, diffs, identifies the port
         Repeat for each arm.
+    
+    Identified ports are persisted in the database so they survive restarts.
     """
 
     def __init__(self):
         # Active identification sessions: session_id -> ports snapshot
         self.sessions: Dict[str, List[str]] = {}
-        # Identified ports: arm_name -> port path
+        # Identified ports: arm_name -> port path  (in-memory cache, backed by DB)
         self.identified_ports: Dict[str, str] = {}
+
+    def load_from_db(self):
+        """Load previously identified ports from the database."""
+        self.identified_ports = database.get_all_ports()
 
     def _scan_ports(self) -> List[str]:
         """Scan for serial ports (same logic as lerobot's find_available_ports)"""
@@ -69,8 +77,8 @@ class PortIdentificationService:
         if len(ports_diff) == 1:
             port = ports_diff[0]
             self.identified_ports[arm_name] = port
-            # Update the session snapshot for the next arm identification
-            # (ports_after is the new baseline, but we restore the original for re-scan)
+            # Persist to DB
+            database.save_port(arm_name, port)
             message = f"Identified! The {arm_name} arm is on port {port}. You can reconnect it now."
             return port, ports_diff, message
         elif len(ports_diff) == 0:
@@ -88,17 +96,28 @@ class PortIdentificationService:
         return ports
 
     def get_identified_ports(self) -> Dict[str, str]:
-        """Get all identified port-to-arm mappings"""
+        """Get all identified port-to-arm mappings (from memory cache, backed by DB)"""
         return self.identified_ports.copy()
+
+    def set_port(self, arm_name: str, port_path: str):
+        """Manually set a port mapping (e.g. from the frontend)"""
+        self.identified_ports[arm_name] = port_path
+        database.save_port(arm_name, port_path)
+
+    def remove_port(self, arm_name: str) -> bool:
+        """Remove a specific port mapping"""
+        self.identified_ports.pop(arm_name, None)
+        return database.delete_port(arm_name)
 
     def clear_session(self, session_id: str):
         """Clean up a session"""
         self.sessions.pop(session_id, None)
 
     def clear_all(self):
-        """Clear all sessions and identified ports"""
+        """Clear all sessions and identified ports (in-memory and DB)"""
         self.sessions.clear()
         self.identified_ports.clear()
+        database.delete_all_ports()
 
 
 # Singleton instance

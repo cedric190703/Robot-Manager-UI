@@ -108,7 +108,7 @@ export const CameraPanel = () => {
 
   return (
     <div className="card">
-      <h2><Camera size={24} /> Camera Management</h2>
+      <h2><Camera size={20} /> Camera Management</h2>
 
       {/* ─── Camera Preview ───────────────────────────────────── */}
       <div className="section">
