@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import type { CalibrateRequest } from '../api/robotApi';
-import { calibrateRobot, resetCalibration } from '../api/robotApi';
-import { Target, Trash2 } from 'lucide-react';
+import type { CalibrateRequest, CalibrationRecord } from '../api/robotApi';
+import { calibrateRobot, resetCalibration, listCalibrations, saveCalibration, deleteCalibrationRecord } from '../api/robotApi';
+import { Target, Trash2, CheckCircle, Clock } from 'lucide-react';
 import { InteractiveTerminal } from './InteractiveTerminal';
 import { useInteractiveSession } from '../hooks/useInteractiveSession';
 
@@ -13,6 +13,7 @@ export const CalibrationPanel = ({ identifiedPorts }: CalibrationPanelProps) => 
   const [leaderSessionId, setLeaderSessionId] = useState<string | null>(null);
   const [followerSessionId, setFollowerSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [calibrations, setCalibrations] = useState<CalibrationRecord[]>([]);
 
   const [leaderConfig, setLeaderConfig] = useState({
     robot_type: 'so101_leader' as const,
@@ -25,6 +26,13 @@ export const CalibrationPanel = ({ identifiedPorts }: CalibrationPanelProps) => 
     port: '/dev/ttyACM1',
     robot_id: 'follower',
   });
+
+  // Load saved calibrations on mount
+  useEffect(() => {
+    listCalibrations()
+      .then(setCalibrations)
+      .catch(() => {});
+  }, []);
 
   // Auto-assign ports when identified
   useEffect(() => {
@@ -41,6 +49,38 @@ export const CalibrationPanel = ({ identifiedPorts }: CalibrationPanelProps) => 
   // Interactive session hooks
   const leaderSession = useInteractiveSession(leaderSessionId);
   const followerSession = useInteractiveSession(followerSessionId);
+
+  // Helper: find saved calibration for an arm
+  const getCalibration = (role: string, name: string) =>
+    calibrations.find((c) => c.arm_role === role && c.arm_name === name);
+
+  const leaderCalibration = getCalibration('teleop', leaderConfig.robot_id);
+  const followerCalibration = getCalibration('robot', followerConfig.robot_id);
+
+  // Save calibration record after session completes successfully
+  useEffect(() => {
+    if (leaderSession.isDone && leaderSession.session?.status === 'completed') {
+      saveCalibration({
+        arm_name: leaderConfig.robot_id,
+        arm_role: 'teleop',
+        robot_type: leaderConfig.robot_type,
+        robot_id: leaderConfig.robot_id,
+        port: leaderConfig.port,
+      }).then(() => listCalibrations().then(setCalibrations));
+    }
+  }, [leaderSession.isDone, leaderSession.session?.status]);
+
+  useEffect(() => {
+    if (followerSession.isDone && followerSession.session?.status === 'completed') {
+      saveCalibration({
+        arm_name: followerConfig.robot_id,
+        arm_role: 'robot',
+        robot_type: followerConfig.robot_type,
+        robot_id: followerConfig.robot_id,
+        port: followerConfig.port,
+      }).then(() => listCalibrations().then(setCalibrations));
+    }
+  }, [followerSession.isDone, followerSession.session?.status]);
 
   const handleCalibrateLeader = async () => {
     try {
@@ -87,6 +127,18 @@ export const CalibrationPanel = ({ identifiedPorts }: CalibrationPanelProps) => 
   const handleResetCalibration = async (robotId: string, calType: string) => {
     try {
       await resetCalibration(robotId, calType);
+      // Also remove the DB record
+      const role = calType === 'teleop' ? 'teleop' : calType === 'robot' ? 'robot' : 'teleop';
+      try {
+        await deleteCalibrationRecord(role, robotId);
+        // If calType is 'all', also delete the other role
+        if (calType === 'all') {
+          await deleteCalibrationRecord('robot', robotId).catch(() => {});
+        }
+      } catch {
+        // record might not exist yet
+      }
+      setCalibrations(await listCalibrations());
       alert(`Calibration files reset for ${robotId}. You can now re-calibrate.`);
     } catch (error) {
       alert('Failed to reset calibration: ' + (error as Error).message);
@@ -95,7 +147,7 @@ export const CalibrationPanel = ({ identifiedPorts }: CalibrationPanelProps) => 
 
   return (
     <div className="card">
-      <h2><Target size={24} /> Robot Calibration</h2>
+      <h2><Target size={20} /> Robot Calibration</h2>
 
       <div className="calibration-info">
         <p>
@@ -112,7 +164,24 @@ export const CalibrationPanel = ({ identifiedPorts }: CalibrationPanelProps) => 
       <div className="calibration-grid">
         {/* Leader Calibration */}
         <div className="section">
-          <h3>Leader Arm (Teleop)</h3>
+          <h3>
+            Leader Arm (Teleop)
+            {leaderCalibration && (
+              <span className="calibration-badge calibration-done" title={`Calibrated on ${new Date(leaderCalibration.calibrated_at).toLocaleString()}`}>
+                <CheckCircle size={14} /> Calibrated
+              </span>
+            )}
+          </h3>
+          
+          {leaderCalibration && !leaderSession.session && (
+            <div className="calibration-saved-info">
+              <Clock size={14} />
+              <span>
+                Last calibrated: {new Date(leaderCalibration.calibrated_at).toLocaleString()}
+                {' '}| Type: {leaderCalibration.robot_type} | Port: {leaderCalibration.port}
+              </span>
+            </div>
+          )}
           
           <div className="form-group">
             <label>Robot Type:</label>
@@ -207,7 +276,24 @@ export const CalibrationPanel = ({ identifiedPorts }: CalibrationPanelProps) => 
 
         {/* Follower Calibration */}
         <div className="section">
-          <h3>Follower Arm (Robot)</h3>
+          <h3>
+            Follower Arm (Robot)
+            {followerCalibration && (
+              <span className="calibration-badge calibration-done" title={`Calibrated on ${new Date(followerCalibration.calibrated_at).toLocaleString()}`}>
+                <CheckCircle size={14} /> Calibrated
+              </span>
+            )}
+          </h3>
+
+          {followerCalibration && !followerSession.session && (
+            <div className="calibration-saved-info">
+              <Clock size={14} />
+              <span>
+                Last calibrated: {new Date(followerCalibration.calibrated_at).toLocaleString()}
+                {' '}| Type: {followerCalibration.robot_type} | Port: {followerCalibration.port}
+              </span>
+            </div>
+          )}
           
           <div className="form-group">
             <label>Robot Type:</label>

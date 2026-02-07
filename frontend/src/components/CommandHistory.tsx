@@ -57,7 +57,7 @@ export const CommandHistory = () => {
   return (
     <div className="card">
       <div className="card-header">
-        <h2><History size={24} /> Command History</h2>
+        <h2><History size={20} /> Command History</h2>
         <div className="header-actions">
           <label className="checkbox-label">
             <input

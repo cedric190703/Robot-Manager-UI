@@ -59,9 +59,13 @@ RUN /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
 COPY ./app ./app
 COPY ./main.py ./main.py
 
+# Create data directory for SQLite database
+RUN mkdir -p /app/data
+
 # Create a non-root user with sudo privileges
 RUN useradd -m -s /bin/bash robotuser && \
-    echo "robotuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+    echo "robotuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    chown -R robotuser:robotuser /app/data
 
 # Switch to non-root user
 USER robotuser

@@ -1,13 +1,37 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
 from app.config.config import settings
 from app.api.routes import router as commands_router
+from app.api.recording_routes import router as recording_router
+from app.api.settings_routes import router as settings_router
+from app.db import init_db
+from app.services.port_service import port_service
+
+
+# ── Suppress /health endpoint access-log noise ──────────────────
+class _HealthFilter(logging.Filter):
+    """Drop uvicorn access-log lines for GET /health."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "GET /health" in msg or '"GET /health' in msg:
+            return False
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_HealthFilter())
 
 
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application"""
+    
+    # Initialise persistent database
+    init_db()
+
+    # Restore persisted state from DB
+    port_service.load_from_db()
     
     app = FastAPI(
         title=settings.app_name,
@@ -29,6 +53,16 @@ def create_application() -> FastAPI:
         commands_router,
         prefix="/commands",
         tags=["commands"]
+    )
+    app.include_router(
+        recording_router,
+        prefix="/recording",
+        tags=["recording"]
+    )
+    app.include_router(
+        settings_router,
+        prefix="/settings",
+        tags=["settings"]
     )
     
     # Root endpoints

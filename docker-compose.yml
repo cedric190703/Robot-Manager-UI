@@ -15,6 +15,8 @@ services:
       - ./backend:/app
       # Mount device access (for robot connections)
       - /dev:/dev
+      # Persistent database storage
+      - backend_data:/app/data
     privileged: true  # Required for device access and sudo commands
     restart: unless-stopped
     networks:

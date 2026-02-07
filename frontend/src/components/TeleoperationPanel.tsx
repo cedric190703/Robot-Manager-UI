@@ -62,7 +62,7 @@ export const TeleoperationPanel = ({ identifiedPorts }: TeleoperationPanelProps)
 
   return (
     <div className="card">
-      <h2><Play size={24} /> Teleoperation Control</h2>
+      <h2><Play size={20} /> Teleoperation Control</h2>
 
       <div className="teleoperation-grid">
         {/* Robot (Follower) Configuration */}

@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   identifyPortStart,
   identifyPortDetect,
   identifyPortRefresh,
   chmodPort,
+  getIdentifiedPorts,
+  clearAllPorts,
 } from '../api/robotApi';
-import { Search, Lock, Usb, Unplug, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
+import { Search, Lock, Usb, Unplug, CheckCircle, AlertCircle, RotateCcw, Database, Trash2 } from 'lucide-react';
 import { CommandStatus } from './CommandStatus';
 import { useCommandStatus } from '../hooks/useCommandStatus';
 
@@ -30,12 +32,35 @@ export const PortManager = ({ onPortsDetected }: PortManagerProps) => {
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hasSavedPorts, setHasSavedPorts] = useState(false);
 
   // Chmod state
   const [chmodCommandId, setChmodCommandId] = useState<string | null>(null);
   const [selectedPort, setSelectedPort] = useState('/dev/ttyACM0');
   const [permissions, setPermissions] = useState('666');
   const { command: chmodCommand } = useCommandStatus(chmodCommandId);
+
+  // Load persisted ports from backend on mount
+  useEffect(() => {
+    getIdentifiedPorts()
+      .then((res) => {
+        if (res.ports && Object.keys(res.ports).length > 0) {
+          const arms: IdentifiedArm[] = Object.entries(res.ports).map(([name, port]) => ({
+            name,
+            port,
+          }));
+          setIdentifiedArms(arms);
+          setHasSavedPorts(true);
+          onPortsDetected(res.ports);
+          // Set chmod port to first found
+          const firstPort = Object.values(res.ports)[0];
+          if (firstPort) setSelectedPort(firstPort);
+        }
+      })
+      .catch(() => {
+        // Backend not ready yet
+      });
+  }, [onPortsDetected]);
 
   // Get the arm name for the current identification round
   const getNextArmName = () => {
@@ -143,6 +168,20 @@ export const PortManager = ({ onPortsDetected }: PortManagerProps) => {
     setStatusMessage('');
     setErrorMessage('');
     setCurrentArmName('leader');
+    setHasSavedPorts(false);
+  };
+
+  // Clear saved ports from DB
+  const handleClearSavedPorts = async () => {
+    try {
+      await clearAllPorts();
+      setIdentifiedArms([]);
+      setHasSavedPorts(false);
+      onPortsDetected({});
+      setStep('idle');
+    } catch (error) {
+      console.error('Failed to clear saved ports:', error);
+    }
   };
 
   // Chmod handler
@@ -163,11 +202,11 @@ export const PortManager = ({ onPortsDetected }: PortManagerProps) => {
 
   return (
     <div className="card">
-      <h2><Search size={24} /> Port Identification</h2>
+      <h2><Search size={20} /> Port Identification</h2>
 
       {/* Wizard Section */}
       <div className="section">
-        <h3><Usb size={20} /> Identify Arm Ports</h3>
+        <h3><Usb size={16} /> Identify Arm Ports</h3>
         <p className="section-description">
           This wizard identifies which USB port belongs to which arm by detecting disconnections —
           just like <code>lerobot-find-port</code>.
@@ -254,7 +293,14 @@ export const PortManager = ({ onPortsDetected }: PortManagerProps) => {
         {/* Identified arms summary */}
         {identifiedArms.length > 0 && (
           <div className="detected-ports">
-            <p><strong>Identified Arms:</strong></p>
+            <p>
+              <strong>Identified Arms:</strong>
+              {hasSavedPorts && (
+                <span className="saved-badge" title="Loaded from database — persisted across restarts">
+                  <Database size={14} /> Saved
+                </span>
+              )}
+            </p>
             <div className="port-tags">
               {identifiedArms.map((arm) => (
                 <span key={arm.name} className="port-tag">
@@ -263,15 +309,24 @@ export const PortManager = ({ onPortsDetected }: PortManagerProps) => {
               ))}
             </div>
             <p className="port-hint">
-              These ports have been automatically assigned to the Calibration and Teleoperation tabs.
+              These ports are saved and will be automatically restored on restart.
+              They are shared with the Calibration, Teleoperation, and Recording tabs.
             </p>
+            <button
+              className="btn btn-danger-outline btn-sm"
+              onClick={handleClearSavedPorts}
+              title="Clear all saved port mappings"
+              style={{ marginTop: '0.5rem' }}
+            >
+              <Trash2 size={14} /> Clear Saved Ports
+            </button>
           </div>
         )}
       </div>
 
       {/* Chmod Section */}
       <div className="section">
-        <h3><Lock size={20} /> Change Port Permissions</h3>
+        <h3><Lock size={16} /> Change Port Permissions</h3>
         <div className="form-group">
           <label>Port:</label>
           {allPorts.length > 0 ? (
