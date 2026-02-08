@@ -76,7 +76,7 @@ class TeleoperateRequest(BaseModel):
     teleop_port: str = Field(..., example="/dev/ttyACM1")
     teleop_id: str = Field(..., example="leader")
     fps: Optional[int] = Field(default=30, example=30)
-    display_data: bool = Field(default=True)
+    display_data: bool = Field(default=False, description="Requires a display server (X11/Wayland). Disabled by default in Docker.")
 
 
 class CommandResponse(BaseModel):
@@ -282,6 +282,30 @@ class EpisodeResponse(BaseModel):
 class StartRecordingRequest(BaseModel):
     """Request to start a recording session from a saved config"""
     config_id: str
+
+
+class DirectRecordRequest(BaseModel):
+    """Request to start a recording session directly (no saved config needed)"""
+    robot_type: RobotType = Field(default=RobotType.SO101_FOLLOWER)
+    robot_port: str = Field(..., example="/dev/ttyACM0")
+    robot_id: str = Field(default="follower", example="follower")
+    cameras: List[CameraConfig] = Field(default_factory=list)
+    teleop_type: Optional[RobotType] = Field(default=RobotType.SO101_LEADER)
+    teleop_port: Optional[str] = Field(default=None, example="/dev/ttyACM1")
+    teleop_id: Optional[str] = Field(default="leader", example="leader")
+    policy_path: Optional[str] = None
+    policy_type: Optional[str] = None
+    policy_device: Optional[str] = None
+    repo_id: str = Field(..., example="my_user/my_dataset")
+    num_episodes: int = Field(default=10, ge=1)
+    single_task: str = Field(default="", example="Pick the red cube")
+    fps: int = Field(default=30, ge=1, le=60)
+    episode_time_s: int = Field(default=30, ge=1)
+    reset_time_s: int = Field(default=10, ge=0)
+    display_data: bool = Field(default=False)
+    play_sounds: bool = Field(default=False)
+    push_to_hub: bool = Field(default=True)
+    force_override: bool = Field(default=False, description="If true, remove existing dataset dir before recording")
 
 
 class StartRecordingResponse(BaseModel):

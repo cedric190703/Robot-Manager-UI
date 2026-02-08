@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Circle, Play, Square, Trash2, Plus, Save, Film, Brain, Repeat,
-  ChevronDown, ChevronRight, Camera, RefreshCw, Database,
-  GraduationCap, FlaskConical, Gamepad2, Key, Workflow, Wrench,
+  ChevronDown, ChevronRight, Camera,
+  GraduationCap, FlaskConical, Gamepad2, Key, Workflow, Database,
 } from 'lucide-react';
 import type {
   RecordingConfigCreate,
@@ -21,8 +21,8 @@ import {
   deleteRecordingConfig,
   listDatasets,
   startRecording,
+  startRecordingDirect,
   stopRecording,
-  deleteDataset,
   getCameraDevices,
   startReplay,
   startTrain,
@@ -47,9 +47,9 @@ const DEFAULT_CAMERA: CameraConfigData = {
 
 const emptyConfig = (mode: RecordingMode): RecordingConfigCreate => ({
   name: '', description: '',
-  robot_type: 'so100_follower', robot_port: '/dev/ttyACM0', robot_id: 'my_robot',
+  robot_type: 'so101_follower', robot_port: '/dev/ttyACM0', robot_id: 'follower',
   cameras: [],
-  teleop_type: mode === 'teleop' ? 'so100_leader' : null,
+  teleop_type: mode === 'teleop' ? 'so101_leader' : null,
   teleop_port: mode === 'teleop' ? '/dev/ttyACM1' : null,
   teleop_id: mode === 'teleop' ? 'leader' : null,
   policy_path: mode === 'policy' ? '' : null,
@@ -154,9 +154,9 @@ export const RecordingPanel = ({ identifiedPorts }: RecordingPanelProps) => {
       {/* Tab content */}
       {subTab === 'record' && (
         <RecordTab
-          identifiedPorts={identifiedPorts} allPorts={allPorts} configs={configs} datasets={datasets}
-          availableDevices={availableDevices} loadingConfigs={loadingConfigs} isRunning={isRunning}
-          hfUsername={hf.hf_username} refresh={refresh}
+          identifiedPorts={identifiedPorts} allPorts={allPorts}
+          availableDevices={availableDevices} isRunning={isRunning}
+          hfUsername={hf.hf_username}
           onStart={(sid, did) => { setActiveSessionId(sid); setActiveDatasetId(did); setActiveLabel('Recording Session'); }}
         />
       )}
@@ -205,20 +205,19 @@ export const RecordingPanel = ({ identifiedPorts }: RecordingPanelProps) => {
 };
 
 /* ================================================================
-   RECORD TAB
+   RECORD TAB — Direct command runner (no configs)
    ================================================================ */
 interface RecordTabProps {
-  identifiedPorts: Record<string, string>; allPorts: string[]; configs: RecordingConfigResponse[];
-  datasets: DatasetResponse[]; availableDevices: CameraDevice[]; loadingConfigs: boolean;
-  isRunning: boolean; hfUsername: string; refresh: () => void;
+  identifiedPorts: Record<string, string>; allPorts: string[];
+  availableDevices: CameraDevice[]; isRunning: boolean; hfUsername: string;
   onStart: (sessionId: string, datasetId: string) => void;
 }
 
-const RecordTab = ({ identifiedPorts, allPorts, configs, datasets, availableDevices, loadingConfigs, isRunning, hfUsername, refresh, onStart }: RecordTabProps) => {
+const RecordTab = ({ identifiedPorts, allPorts, availableDevices, isRunning, hfUsername, onStart }: RecordTabProps) => {
   const [form, setForm] = useState<RecordingConfigCreate>(emptyConfig('teleop'));
   const [cameras, setCameras] = useState<CameraConfigData[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [expandedConfig, setExpandedConfig] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [forceOverride, setForceOverride] = useState(false);
 
   useEffect(() => {
     const updates: Partial<RecordingConfigCreate> = {};
@@ -234,47 +233,25 @@ const RecordTab = ({ identifiedPorts, allPorts, configs, datasets, availableDevi
     setCameras(prev => prev.map((c, i) => i === idx ? { ...c, [field]: value } : c));
   };
 
-  const handleSave = async () => {
-    if (!form.name || !form.repo_id) { alert('Please provide a config name and repo ID'); return; }
-    setSaving(true);
+  const handleStart = async () => {
+    if (!form.repo_id) { alert('Please provide a Dataset Repo ID'); return; }
+    setStarting(true);
     try {
-      await createRecordingConfig({ ...form, cameras });
-      await refresh();
-      setForm(emptyConfig('teleop'));
-      setCameras([]);
-    } catch (e) { alert('Failed to save config: ' + (e as Error).message); }
-    finally { setSaving(false); }
-  };
-
-  const handleStart = async (configId: string) => {
-    try {
-      const res = await startRecording(configId);
+      // Use the direct run endpoint (no config save needed)
+      const payload = { ...form, cameras, force_override: forceOverride };
+      const res = await startRecordingDirect(payload);
       onStart(res.session_id, res.dataset_id);
     } catch (e) { alert('Failed to start recording: ' + (e as Error).message); }
+    finally { setStarting(false); }
   };
-
-  const handleDeleteConfig = async (id: string) => {
-    if (!window.confirm('Delete this config and all its datasets?')) return;
-    await deleteRecordingConfig(id);
-    refresh();
-  };
-
-  const handleDeleteDataset = async (id: string) => {
-    if (!window.confirm('Delete this dataset?')) return;
-    await deleteDataset(id);
-    refresh();
-  };
-
-  const teleopConfigs = configs.filter(c => !c.policy_path);
 
   return (
     <>
       <div className="section">
-        <h3><Wrench size={16} /> New Teleop Recording Config</h3>
+        <h3><Circle size={16} /> Record Episodes</h3>
+        <p className="section-desc">Configure and run <code>lerobot-record</code> directly. No need to save a config first.</p>
         <div className="recording-form-grid">
           <div>
-            <div className="form-group"><label>Config Name *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="My recording config" disabled={isRunning} /></div>
-            <div className="form-group"><label>Description</label><input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional" disabled={isRunning} /></div>
             <div className="form-group"><label>Robot Type</label>
               <select value={form.robot_type} onChange={e => setForm({ ...form, robot_type: e.target.value })} disabled={isRunning}>
                 <option value="so100_follower">SO-100 Follower</option><option value="so101_follower">SO-101 Follower</option>
@@ -289,9 +266,7 @@ const RecordTab = ({ identifiedPorts, allPorts, configs, datasets, availableDevi
                 <input value={form.robot_port} onChange={e => setForm({ ...form, robot_port: e.target.value })} placeholder="/dev/ttyACM0" disabled={isRunning} />
               )}
             </div>
-            <div className="form-group"><label>Robot ID</label><input value={form.robot_id} onChange={e => setForm({ ...form, robot_id: e.target.value })} placeholder="my_robot" disabled={isRunning} /></div>
-          </div>
-          <div>
+            <div className="form-group"><label>Robot ID</label><input value={form.robot_id} onChange={e => setForm({ ...form, robot_id: e.target.value })} placeholder="follower" disabled={isRunning} /></div>
             <div className="form-group"><label>Teleop Type</label>
               <select value={form.teleop_type || ''} onChange={e => setForm({ ...form, teleop_type: e.target.value })} disabled={isRunning}>
                 <option value="so100_leader">SO-100 Leader</option><option value="so101_leader">SO-101 Leader</option>
@@ -307,6 +282,8 @@ const RecordTab = ({ identifiedPorts, allPorts, configs, datasets, availableDevi
               )}
             </div>
             <div className="form-group"><label>Teleop ID</label><input value={form.teleop_id || ''} onChange={e => setForm({ ...form, teleop_id: e.target.value })} placeholder="leader" disabled={isRunning} /></div>
+          </div>
+          <div>
             <div className="form-group"><label>Dataset Repo ID *</label><input value={form.repo_id} onChange={e => setForm({ ...form, repo_id: e.target.value })} placeholder={`${hfUsername || 'my_user'}/my_dataset`} disabled={isRunning} /></div>
             <div className="form-group"><label>Task Description</label><input value={form.single_task} onChange={e => setForm({ ...form, single_task: e.target.value })} placeholder="Pick the red cube" disabled={isRunning} /></div>
             <div className="settings-grid">
@@ -316,29 +293,16 @@ const RecordTab = ({ identifiedPorts, allPorts, configs, datasets, availableDevi
               <div className="form-group"><label>Reset Time (s)</label><input type="number" min={0} value={form.reset_time_s} onChange={e => setForm({ ...form, reset_time_s: parseInt(e.target.value) || 0 })} disabled={isRunning} /></div>
             </div>
             <div className="settings-grid">
-              <div className="form-group checkbox-group"><label><input type="checkbox" checked={form.display_data} onChange={e => setForm({ ...form, display_data: e.target.checked })} disabled={isRunning} /> Display Data</label></div>
-              <div className="form-group checkbox-group"><label><input type="checkbox" checked={form.play_sounds} onChange={e => setForm({ ...form, play_sounds: e.target.checked })} disabled={isRunning} /> Play Sounds</label></div>
+              <div className="form-group checkbox-group"><label><input type="checkbox" checked={forceOverride} onChange={e => setForceOverride(e.target.checked)} disabled={isRunning} /> Overwrite existing dataset</label></div>
               <div className="form-group checkbox-group"><label><input type="checkbox" checked={form.push_to_hub} onChange={e => setForm({ ...form, push_to_hub: e.target.checked })} disabled={isRunning} /> Push to Hub</label></div>
             </div>
           </div>
         </div>
       </div>
       <CameraSection cameras={cameras} availableDevices={availableDevices} isRunning={isRunning} addCamera={addCamera} removeCamera={removeCamera} updateCamera={updateCamera} />
-      <button className="btn btn-primary btn-large" onClick={handleSave} disabled={saving || isRunning}>
-        <Save size={16} /> {saving ? 'Saving...' : 'Save Configuration'}
+      <button className="btn btn-success btn-large" onClick={handleStart} disabled={starting || isRunning}>
+        <Circle size={16} /> {starting ? 'Starting...' : 'Start Recording'}
       </button>
-      <div className="section" style={{ marginTop: 24 }}>
-        <h3><Database size={16} /> Saved Teleop Configs
-          <button className="btn btn-sm btn-secondary" onClick={refresh} disabled={loadingConfigs} style={{ marginLeft: 12 }}><RefreshCw size={14} className={loadingConfigs ? 'spin' : ''} /></button>
-        </h3>
-        {teleopConfigs.length === 0 && <p className="section-desc">No saved teleop configurations yet.</p>}
-        {teleopConfigs.map(cfg => (
-          <ConfigCard key={cfg.id} cfg={cfg} datasets={datasets} isRunning={isRunning} expanded={expandedConfig === cfg.id}
-            onToggle={() => setExpandedConfig(expandedConfig === cfg.id ? null : cfg.id)}
-            onStart={() => handleStart(cfg.id)} onDelete={() => handleDeleteConfig(cfg.id)} onDeleteDataset={handleDeleteDataset}
-          />
-        ))}
-      </div>
     </>
   );
 };
@@ -351,7 +315,7 @@ const ReplayTab = ({ identifiedPorts, allPorts, isRunning, hfUsername, onStart }
   onStart: (sessionId: string) => void;
 }) => {
   const [form, setForm] = useState<ReplayRequest>({
-    robot_type: 'so100_follower', robot_port: '/dev/ttyACM0', robot_id: 'my_robot', repo_id: '', episode: 0,
+    robot_type: 'so101_follower', robot_port: '/dev/ttyACM0', robot_id: 'follower', repo_id: '', episode: 0,
   });
   useEffect(() => {
     if (identifiedPorts.follower) setForm(prev => ({ ...prev, robot_port: identifiedPorts.follower }));

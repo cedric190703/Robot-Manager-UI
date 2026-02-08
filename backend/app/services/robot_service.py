@@ -82,7 +82,8 @@ class RobotService:
         """Build the teleoperation command.
         
         Before running, we verify calibration files exist and are non-empty,
-        otherwise the draccus JSON parser will crash.
+        otherwise the draccus JSON parser will crash or LeRobot will
+        re-trigger calibration interactively.
         """
         # Build the calibration file validation
         teleop_type_dir = "so_leader" if "leader" in request.teleop_type.value else "so_follower"
@@ -91,15 +92,33 @@ class RobotService:
         teleop_cal = f"$HOME/.cache/huggingface/lerobot/calibration/teleoperators/{teleop_type_dir}/{request.teleop_id}.json"
         robot_cal = f"$HOME/.cache/huggingface/lerobot/calibration/robots/{robot_type_dir}/{request.robot_id}.json"
 
-        # Pre-check: validate calibration files
+        # Pre-check: validate calibration files exist AND are non-empty
         validate = (
-            f'for f in "{teleop_cal}" "{robot_cal}"; do '
-            f'  if [ -f "$f" ] && [ ! -s "$f" ]; then '
-            f'    echo "ERROR: Calibration file $f is empty. Please re-calibrate first."; '
-            f'    rm -f "$f"; '
-            f'    exit 1; '
-            f'  fi; '
-            f'done && '
+            # Check teleop (leader) calibration
+            f'if [ ! -f "{teleop_cal}" ]; then '
+            f'  echo "ERROR: Teleop calibration file not found: {teleop_cal}"; '
+            f'  echo "Please calibrate the leader arm first (Calibration tab → teleop mode)."; '
+            f'  exit 1; '
+            f'fi && '
+            f'if [ ! -s "{teleop_cal}" ]; then '
+            f'  echo "ERROR: Teleop calibration file is empty: {teleop_cal}"; '
+            f'  rm -f "{teleop_cal}"; '
+            f'  echo "Empty file removed. Please re-calibrate the leader arm."; '
+            f'  exit 1; '
+            f'fi && '
+            # Check robot (follower) calibration
+            f'if [ ! -f "{robot_cal}" ]; then '
+            f'  echo "ERROR: Robot calibration file not found: {robot_cal}"; '
+            f'  echo "Please calibrate the follower arm first (Calibration tab → robot mode)."; '
+            f'  exit 1; '
+            f'fi && '
+            f'if [ ! -s "{robot_cal}" ]; then '
+            f'  echo "ERROR: Robot calibration file is empty: {robot_cal}"; '
+            f'  rm -f "{robot_cal}"; '
+            f'  echo "Empty file removed. Please re-calibrate the follower arm."; '
+            f'  exit 1; '
+            f'fi && '
+            f'echo "✓ Both calibration files found and valid." && '
         )
 
         command_parts = [
@@ -115,8 +134,14 @@ class RobotService:
         if request.fps:
             command_parts.append(f"--fps={request.fps}")
         
-        if request.display_data:
+        # Only enable display_data when a display server is available.
+        # Inside Docker without X11 forwarding, Rerun/winit will crash.
+        import os
+        has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        if request.display_data and has_display:
             command_parts.append("--display_data=true")
+        else:
+            command_parts.append("--display_data=false")
         
         return validate + " ".join(command_parts)
 

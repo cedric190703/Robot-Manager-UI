@@ -9,6 +9,7 @@ from app.models.schemas import (
     EpisodeResponse,
     StartRecordingRequest,
     StartRecordingResponse,
+    DirectRecordRequest,
     ReplayRequest,
     TrainRequest,
     EvalRequest,
@@ -129,6 +130,47 @@ async def start_recording(request: StartRecordingRequest):
         command=command,
         status="recording",
         message=f"Recording started: {config['num_episodes']} episodes → {config['repo_id']}",
+    )
+
+
+@router.post("/start-direct", response_model=StartRecordingResponse)
+async def start_recording_direct(request: DirectRecordRequest):
+    """
+    Start a `lerobot-record` session directly from form fields (no saved config needed).
+    Builds the command from the request body and launches the PTY session.
+    """
+    # Convert request to the dict format build_record_command expects
+    config = {
+        "robot_type": request.robot_type.value,
+        "robot_port": request.robot_port,
+        "robot_id": request.robot_id,
+        "cameras": [c.model_dump() for c in request.cameras],
+        "teleop_type": request.teleop_type.value if request.teleop_type else None,
+        "teleop_port": request.teleop_port,
+        "teleop_id": request.teleop_id,
+        "policy_path": request.policy_path,
+        "policy_type": request.policy_type,
+        "policy_device": request.policy_device,
+        "repo_id": request.repo_id,
+        "num_episodes": request.num_episodes,
+        "single_task": request.single_task,
+        "fps": request.fps,
+        "episode_time_s": request.episode_time_s,
+        "reset_time_s": request.reset_time_s,
+        "display_data": request.display_data,
+        "play_sounds": request.play_sounds,
+        "push_to_hub": request.push_to_hub,
+    }
+
+    command = recording_service.build_record_command(config, force_override=request.force_override)
+    session = interactive_service.start_session(command)
+
+    return StartRecordingResponse(
+        dataset_id="direct",
+        session_id=session.session_id,
+        command=command,
+        status="recording",
+        message=f"Recording started: {request.num_episodes} episodes → {request.repo_id}",
     )
 
 
