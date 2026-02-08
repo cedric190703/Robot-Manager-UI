@@ -396,6 +396,15 @@ export const startRecording = async (configId: string): Promise<StartRecordingRe
   return response.data;
 };
 
+export interface DirectRecordRequest extends RecordingConfigCreate {
+  force_override?: boolean;
+}
+
+export const startRecordingDirect = async (data: DirectRecordRequest): Promise<StartRecordingResponse> => {
+  const response = await api.post('/recording/start-direct', data);
+  return response.data;
+};
+
 export const stopRecording = async (sessionId: string, datasetId?: string) => {
   const params = datasetId ? { dataset_id: datasetId } : {};
   const response = await api.post(`/recording/stop/${sessionId}`, null, { params });

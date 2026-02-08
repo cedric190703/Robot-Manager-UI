@@ -66,6 +66,11 @@ class InteractiveSession:
         env["TERM"] = "xterm"
         env["COLUMNS"] = "120"
         env["LINES"] = "40"
+        # Prevent Rerun / GUI libraries from crashing when display_data=true
+        # is accidentally enabled in a headless Docker environment.
+        if "DISPLAY" not in env and "WAYLAND_DISPLAY" not in env:
+            env["DISPLAY"] = ""  # empty but defined — avoids hard crash in winit
+            env["RERUN_PANIC_ON_WARN"] = "0"
 
         self.process = subprocess.Popen(
             ["bash", "-c", full_command],

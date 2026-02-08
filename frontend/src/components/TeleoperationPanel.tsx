@@ -21,7 +21,7 @@ export const TeleoperationPanel = ({ identifiedPorts }: TeleoperationPanelProps)
     teleop_port: '/dev/ttyACM0',
     teleop_id: 'leader',
     fps: 30,
-    display_data: true,
+    display_data: false,
   });
 
   // Auto-assign ports when identified by name
@@ -222,8 +222,9 @@ export const TeleoperationPanel = ({ identifiedPorts }: TeleoperationPanelProps)
                 })}
                 disabled={isRunning}
               />
-              Display Data
+              Display Data (Rerun Viewer)
             </label>
+            <span className="form-hint">Requires X11/Wayland display. Disabled automatically in headless Docker.</span>
           </div>
         </div>
       </div>

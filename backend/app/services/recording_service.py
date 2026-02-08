@@ -139,8 +139,22 @@ class RecordingService:
             )
         return '"{' + ", ".join(parts) + '}"'
 
-    def build_record_command(self, config: Dict[str, Any]) -> str:
+    def build_record_command(self, config: Dict[str, Any], force_override: bool = False) -> str:
         """Build a full `lerobot-record` CLI command from a config dict."""
+        pre_parts = []
+
+        # If force_override, remove the existing dataset directory first
+        if force_override and config.get("repo_id"):
+            repo_id = config["repo_id"]
+            # lerobot stores datasets under ~/.cache/huggingface/lerobot/<repo_id>
+            dataset_path = f"$HOME/.cache/huggingface/lerobot/{repo_id}"
+            pre_parts.append(
+                f'if [ -d "{dataset_path}" ]; then '
+                f'echo "Removing existing dataset at {dataset_path}"; '
+                f'rm -rf "{dataset_path}"; '
+                f'fi'
+            )
+
         parts = ["lerobot-record"]
 
         # Robot
@@ -185,13 +199,22 @@ class RecordingService:
         push = config.get("push_to_hub", True)
         parts.append(f"--dataset.push_to_hub={'true' if push else 'false'}")
 
-        # Display & sounds
-        display = config.get("display_data", False)
+        # Display & sounds — force off in headless Docker
+        import os
+        has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        display = config.get("display_data", False) and has_display
         parts.append(f"--display_data={'true' if display else 'false'}")
-        play_sounds = config.get("play_sounds", False)
+
+        # play_sounds requires spd-say which isn't available in Docker
+        import shutil
+        has_spd_say = shutil.which("spd-say") is not None
+        play_sounds = config.get("play_sounds", False) and has_spd_say
         parts.append(f"--play_sounds={'true' if play_sounds else 'false'}")
 
-        return " ".join(parts)
+        command = " ".join(parts)
+        if pre_parts:
+            command = " && ".join(pre_parts) + " && " + command
+        return command
 
     @staticmethod
     def build_replay_command(data) -> str:
