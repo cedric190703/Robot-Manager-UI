@@ -1,8 +1,28 @@
-# Robot Manager - UI to manage the lerobot SO101/SO100 robotic arms
+# Robot Manager
 
-## Project Summary
+UI to manage the **LeRobot SO-101/SO-100** robotic arms.
 
 Robot Manager is a full-stack application for controlling LeRobot hardware through an intuitive web interface. The system features a modular Python backend with FastAPI and a modern React TypeScript frontend with a tabbed interface.
+
+![Dashboard Preview](assets/dashboard.png)
+
+## Key Features
+
+### 🔌 Port Management
+Easily identify and manage USB ports for your robotic arms. The wizard helps you detect which port belongs to which arm.
+![Port Management](assets/ports.png)
+
+### ⚖️ Calibration
+Interactive calibration process to ensure your robotic arms are perfectly synced and ready for action.
+![Calibration](assets/calibration.png)
+
+### 🎮 Teleoperation
+Zero-latency teleoperation control for your leader and follower arms. Configure FPS and visualize data in real-time.
+![Teleoperation](assets/teleop.png)
+
+### 📁 Recording & Pipeline
+Complete pipeline for recording episodes, replaying trajectories, and managing datasets directly from the UI.
+![Recording](assets/recording.png)
 
 ## Architecture
 
@@ -11,24 +31,14 @@ Robot Manager is a full-stack application for controlling LeRobot hardware throu
 ```
 backend/
 ├── app/
-│   ├── __init__.py
 │   ├── main.py                    # FastAPI application factory
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── routes.py             # API endpoint handlers
-│   ├── core/
-│   │   ├── __init__.py
-│   │   └── config.py             # Settings and configuration
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── schemas.py            # Pydantic models
+│   ├── api/routes.py             # API endpoint handlers
+│   ├── core/config.py             # Settings and configuration
+│   ├── models/schemas.py            # Pydantic models
 │   └── services/
-│       ├── __init__.py
 │       ├── command_service.py    # Command execution logic
 │       └── robot_service.py      # Robot-specific operations
-├── main.py                        # Legacy entry point (for compatibility)
-├── requirements.txt
-└── ARCHITECTURE.md
+└── main.py                        # Entry point
 ```
 
 ### Frontend Structure (Tabbed Interface)
